@@ -1,0 +1,52 @@
+name: Build NasFile
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer le zip le plus récent
+        id: zip
+        run: |
+          ZIP=$(ls NasFile-*.zip | sort -V | tail -n 1)
+          VER=${ZIP#NasFile-}
+          VER=${VER%.zip}
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          rm -rf build_src && mkdir build_src && unzip -q "$ZIP" -d build_src
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Compiler l'APK
+        working-directory: build_src
+        run: gradle assembleRelease -PappVersion=${{ steps.zip.outputs.ver }} --no-daemon --stacktrace
+
+      - name: Renommer l'APK
+        run: cp build_src/app/build/outputs/apk/release/app-release.apk NasFile-${{ steps.zip.outputs.ver }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NasFile-${{ steps.zip.outputs.ver }}
+          path: NasFile-${{ steps.zip.outputs.ver }}.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.zip.outputs.ver }}
+          name: NasFile ${{ steps.zip.outputs.ver }}
+          files: NasFile-${{ steps.zip.outputs.ver }}.apk
